@@ -2,6 +2,7 @@ import logging
 import keyboard
 import sys
 from core.hotkey_manager import HotkeyManager
+from core.command_classifier import CommandClassifier
 from audio.recorder import AudioRecorder
 from audio.speech_to_text import SpeechToText
 from utils.exceptions import VoistructError
@@ -24,6 +25,7 @@ class VoistructBackend:
             self.hotkey_manager = HotkeyManager()
             self.recorder = AudioRecorder()
             self.speech_to_text = SpeechToText()
+            self.command_classifier = CommandClassifier()
             self.is_recording = False
         except VoistructError as e:
             logger.error(f"Failed to initialize Voistruct: {str(e)}")
@@ -41,7 +43,26 @@ class VoistructBackend:
                 audio_data = self.recorder.stop_recording()
                 if audio_data is not None:
                     text = self.speech_to_text.transcribe(audio_data)
+                    if not text:
+                        logger.warning("Empty transcription received")
+                        return
+                    text = str(text).strip()
+                    if not text:
+                        logger.warning("Empty text after processing")
+                        return
                     logger.info(f"Transcribed: {text}")
+                    # Classify the command
+                    try:
+                        classification = self.command_classifier.classify_command(text)
+                        logger.info("Classification result:")
+                        logger.info(f"Command Type: {classification['command_type']}")
+                        logger.info(f"Confidence: {classification['confidence']:.2f}")
+                        
+                        if 'category' in classification:
+                            logger.info(f"Task Category: {classification['category']}")
+                            logger.info(f"Category Confidence: {classification['category_confidence']:.2f}")
+                    except Exception as e:
+                        logger.error(f"Classification failed: {str(e)}")
         except VoistructError as e:
             logger.error(f"Error during recording/transcription: {str(e)}")
             self.is_recording = False
@@ -55,6 +76,11 @@ class VoistructBackend:
                 self.hotkey_manager.stop_recording()
             time.sleep(0.1)
 
+    def cleanup(self):
+        """Clean up resources"""
+        if hasattr(self, 'command_classifier'):
+            self.command_classifier.cleanup()
+            
     def run(self):
         try:
             hotkey = 'alt'
@@ -72,6 +98,9 @@ class VoistructBackend:
         except Exception as e:
             logger.error(f"Fatal error: {str(e)}")
             sys.exit(1)
+        finally:
+            self.cleanup()
+            logger.info("Application cleanup completed")
 
 if __name__ == "__main__":
     try:
@@ -80,3 +109,6 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Application failed to start: {str(e)}")
         sys.exit(1)
+    finally:
+        if app:
+            app.cleanup()

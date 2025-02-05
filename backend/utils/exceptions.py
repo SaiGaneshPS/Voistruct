@@ -17,3 +17,8 @@ class TranscriptionError(VoistructError):
 class HotkeyError(VoistructError):
     """Hotkey registration/handling errors"""
     pass
+
+class ClassificationError(VoistructError):
+    """Classification errors"""
+    pass
+
